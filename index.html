@@ -38,11 +38,11 @@
 <canvas id="gameCanvas" width="360" height="640"></canvas>
 
 <script>
-    // --- CANVAS CONFIGURATION ---
+    // --- 1. CANVAS CONFIGURATION ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // --- GLOBAL STATE AND GAME STATS ---
+    // --- 2. GLOBAL STATE AND GAME STATS ---
     let state = 'TITLE'; 
     let score = 0;
     let lives = 3;
@@ -57,7 +57,7 @@
     let enemies = [];
     let enemyBullets = [];
 
-    // --- PLAYER CONFIGURATION (Declared at the top to prevent any ReferenceErrors) ---
+    // --- 3. PLAYER CONFIGURATION (Declared at the top to prevent TDZ ReferenceErrors) ---
     let player = {
         x: 180,
         y: 500,
@@ -67,7 +67,7 @@
         height: 40
     };
 
-    // --- OPTIMIZED OBJECT POOL PARTICLE SYSTEM GLOBALS ---
+    // --- 4. OPTIMIZED OBJECT POOL PARTICLE SYSTEM GLOBALS ---
     const MAX_PARTICLES = 80;
     const particles = Array.from({ length: MAX_PARTICLES }, () => ({
         active: false,
@@ -86,14 +86,14 @@
     let playerDamageFlashFrame = 0;
     const playerDamageFlashMax = 12; // ~200ms at 60fps
 
-    // --- AUDIO SYSTEM GLOBALS ---
+    // --- 5. AUDIO SYSTEM GLOBALS ---
     let audioCtx = null;
     let audioUnlocked = false;
     let masterGain = null;
     let noiseBuffer = null;
     const lastPlayed = {};
 
-    // --- BACKGROUND PARALLAX GLOBALS ---
+    // --- 6. BACKGROUND PARALLAX GLOBALS (Declared only once) ---
     const stars1 = [];
     const stars2 = [];
     const stars3 = [];
@@ -117,7 +117,7 @@
         { x: 275, y: 85, r: 4 }
     ];
 
-    // --- PIXEL SPRITE MATRICES ---
+    // --- 7. PIXEL SPRITE MATRICES ---
     const PLAYER_SPRITE = [
       [null, null, null, '#00e5ff', '#00e5ff', null, null, null],
       [null, null, '#00e5ff', '#ffffff', '#ffffff', '#00e5ff', null, null],
@@ -258,11 +258,11 @@
         score += amount;
     }
 
-    // --- REDESIGNED SOUND SYSTEM (FIXES 1-6) ---
+    // --- REDESIGNED SOUND SYSTEM ---
     function throttleSound(type) {
         const now = Date.now();
         if (lastPlayed[type] && now - lastPlayed[type] < 60) {
-            return false; // Throttled (Fix 4 - 60ms Cooldown)
+            return false; // Throttled (60ms Cooldown)
         }
         lastPlayed[type] = now;
         return true;
@@ -290,11 +290,11 @@
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 masterGain = audioCtx.createGain();
-                masterGain.gain.setValueAtTime(0.85, audioCtx.currentTime); // Global volume set to 0.85 (Fix 6)
+                masterGain.gain.setValueAtTime(0.85, audioCtx.currentTime); // Master gain set to 0.85
                 masterGain.connect(audioCtx.destination);
                 getNoiseBuffer(); // Warm noise buffer
             } catch (e) {
-                console.error("Audio initialization failed:", e);
+                console.error("Audio Context initialization failed:", e);
             }
         }
     }
@@ -317,8 +317,8 @@
         if (!throttleSound('shoot')) return;
         try {
             const now = audioCtx.currentTime;
-            const duration = 0.09; // 90ms (Fix 1)
-            const startFreq = 1200 + (Math.random() * 100 - 50); // Randomize ±50Hz (Fix 1)
+            const duration = 0.09; // 90ms 
+            const startFreq = 1200 + (Math.random() * 100 - 50); // Randomize ±50Hz 
 
             // Layer 1: Sawtooth Oscillator primary laser sweep
             const osc1 = audioCtx.createOscillator();
@@ -381,7 +381,7 @@
             const duration = 0.22; // 220ms
             const buffer = getNoiseBuffer();
 
-            // Layer A: white noise sweep lowpass (Fix 2)
+            // Layer A: white noise sweep lowpass 
             if (buffer) {
                 const source = audioCtx.createBufferSource();
                 source.buffer = buffer;
@@ -404,7 +404,7 @@
                 source.stop(now + duration);
             }
 
-            // Layer B: low sine punch (Fix 2)
+            // Layer B: low sine punch 
             const osc = audioCtx.createOscillator();
             const gainB = audioCtx.createGain();
             osc.type = 'sine';
@@ -448,7 +448,7 @@
             const now = audioCtx.currentTime;
             const buffer = getNoiseBuffer();
             
-            // Layer A: metallic noise (Fix 3)
+            // Layer A: metallic noise 
             if (buffer) {
                 const source = audioCtx.createBufferSource();
                 source.buffer = buffer;
@@ -470,7 +470,7 @@
                 source.stop(now + 0.15);
             }
             
-            // Layer B: low sine thump (Fix 3)
+            // Layer B: low sine thump 
             const osc = audioCtx.createOscillator();
             const gainB = audioCtx.createGain();
             osc.type = 'sine';
@@ -507,7 +507,6 @@
         } catch (e) {}
     }
 
-    // Fix 4: Boss Explosion sound compilation
     function playBigExplosion() {
         if (!audioCtx || audioCtx.state === 'suspended' || !masterGain) return;
         if (!throttleSound('big_explosion')) return;
@@ -568,7 +567,7 @@
         } catch (e) {}
     }
 
-    // --- ADD: VISUAL FEEDBACK TRIGGERS (FIX 7 & 8) ---
+    // --- VISUAL FEEDBACK TRIGGERS (PARTICLES, DECAY & FLASHES) ---
     function spawnParticle(x, y, vx, vy, color, size, lifetimeInFrames) {
         const p = particles.find(p => !p.active);
         if (p) {
@@ -592,6 +591,36 @@
             frame: 0,
             maxFrames: 7 // Grows from 2px to 16px over 120ms (~7 frames)
         });
+    }
+
+    function triggerEnemyDeath(e) {
+        playExplosionSound();
+        addScore(e.xp);
+        
+        // Spawn 8 small particle squares
+        const col = e.color || '#ffffff';
+        for (let i = 0; i < 8; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 4;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            spawnParticle(e.x, e.y, vx, vy, col, 4, 21); // 21 frames = 350ms
+        }
+        
+        // Spawn death flash circle
+        spawnDeathFlash(e.x, e.y);
+    }
+
+    function triggerPlayerHitSparks(x, y) {
+        const colors = ['#ffffff', '#ffaa00', '#ff5500'];
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 3;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            spawnParticle(x, y, vx, vy, color, 3, 18); // 18 frames = 300ms
+        }
     }
 
     function updateAndDrawFlashes(ctx) {
@@ -632,37 +661,7 @@
         ctx.restore();
     }
 
-    function triggerEnemyDeath(e) {
-        playExplosionSound();
-        addScore(e.xp);
-        
-        // Spawn 8 small particle squares (Fix 7)
-        const col = e.color || '#ffffff';
-        for (let i = 0; i < 8; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 2 + Math.random() * 4;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            spawnParticle(e.x, e.y, vx, vy, col, 4, 21); // 21 frames = 350ms
-        }
-        
-        // Spawn death flash circle (Fix 7)
-        spawnDeathFlash(e.x, e.y);
-    }
-
-    function triggerPlayerHitSparks(x, y) {
-        const colors = ['#ffffff', '#ffaa00', '#ff5500'];
-        for (let i = 0; i < 6; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 2 + Math.random() * 3;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            spawnParticle(x, y, vx, vy, color, 3, 18); // 18 frames = 300ms
-        }
-    }
-
-    // --- BACKGROUND STACK (PARALLAX & MOON) ---
+    // --- BACKGROUND RENDER AND PARALLAX LOGIC (No Duplicate Declarations) ---
     function updateStars() {
         stars1.forEach(s => { s.y += 0.5; if (s.y > 640) s.y = 0; });
         stars2.forEach(s => { s.y += 1.0; if (s.y > 640) s.y = 0; });
@@ -735,7 +734,7 @@
         lives -= 1;
         playPlayerHitSound();
         
-        // Fix 8: Screen Flash & Spark Reaction
+        // Visual overlays and spark bursts
         playerDamageFlashFrame = playerDamageFlashMax;
         triggerPlayerHitSparks(player.x, player.y);
 
@@ -785,9 +784,10 @@
     }
 
     // --- ENEMY SHIP CONFIGURATION AND ARRAYS ---
+    // Fix 1: Enforce maximum 3-hit HP cap on all 10 enemy types
     const ENEMY_TYPES = [
         {
-            id: 1, name: "Scout", xp: 30, hp: 1, weight: 100,
+            id: 1, name: "Scout", xp: 30, hp: 1, weight: 35, // HP = 1, 35% Weight Bias
             w: 28, h: 24, speed: 2,
             color: '#39ff14', // Neon Green
             init: (e) => { e.vx = 0; e.vy = e.speed; },
@@ -802,7 +802,7 @@
             }
         },
         {
-            id: 2, name: "Interceptor", xp: 50, hp: 2, weight: 80,
+            id: 2, name: "Zigzagger", xp: 50, hp: 2, weight: 30, // HP = 2, 30% Weight Bias
             w: 28, h: 24, speed: 2.5,
             color: '#00ffff', // Cyan
             init: (e) => { e.vx = 1.5; e.vy = e.speed; },
@@ -822,7 +822,7 @@
             }
         },
         {
-            id: 3, name: "Bomber", xp: 70, hp: 4, weight: 60,
+            id: 3, name: "Armored Fighter", xp: 70, hp: 3, weight: 4, // HP = 3, 4% weight
             w: 36, h: 28, speed: 1.2,
             color: '#ff3333', // Crimson Red
             init: (e) => { e.vx = 0; e.vy = e.speed; },
@@ -839,7 +839,7 @@
             }
         },
         {
-            id: 4, name: "Fighter", xp: 70, hp: 3, weight: 60,
+            id: 4, name: "Sniper Drone", xp: 70, hp: 2, weight: 4, // HP = 2, 4% weight
             w: 28, h: 24, speed: 1.8,
             color: '#ffaa00', // Orange
             init: (e) => { e.vx = 0; e.vy = e.speed; e.startX = e.x; },
@@ -856,7 +856,7 @@
             }
         },
         {
-            id: 5, name: "Kamikaze", xp: 50, hp: 1, weight: 50,
+            id: 5, name: "Kamikaze", xp: 50, hp: 1, weight: 5, // HP = 1, 5% weight
             w: 20, h: 20, speed: 3.5,
             color: '#ffff00', // Yellow
             init: (e) => { e.vx = 0; e.vy = e.speed; e.locked = false; },
@@ -877,10 +877,10 @@
             }
         },
         {
-            id: 6, name: "Laser Vanguard", xp: 70, hp: 3, weight: 40,
+            id: 6, name: "Shielder", xp: 70, hp: 2, weight: 4, // HP = 2, 4% weight. Absorbs 1 hit separately from front
             w: 28, h: 24, speed: 1.0,
             color: '#e040fb', // Bright Violet
-            init: (e) => { e.vx = 1.0; e.vy = e.speed; e.laserActive = false; e.laserTimer = 0; },
+            init: (e) => { e.vx = 1.0; e.vy = e.speed; e.laserActive = false; e.laserTimer = 0; e.shieldActive = true; e.shieldHP = 1; },
             update: (e, frame) => {
                 e.y += e.vy;
                 e.x += e.vx;
@@ -900,7 +900,7 @@
             draw: (ctx, e, frame) => {
                 if (e.laserTimer < 60) {
                     if (Math.floor(frame / 5) % 2 === 0) {
-                        ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
+                        ctx.strokeStyle = 'rgba(255, 0, 255, 0.4)';
                         ctx.lineWidth = 1;
                         ctx.beginPath();
                         ctx.moveTo(e.x, e.y);
@@ -914,10 +914,19 @@
                     ctx.fillRect(e.x - 4, e.y, 8, 640);
                 }
                 drawSprite(ctx, LASER_VANGUARD_SPRITE, e.x, e.y, 4);
+                
+                // Draw shield arc if active (absorbs 1 hit separately)
+                if (e.shieldActive && e.shieldHP > 0) {
+                    ctx.strokeStyle = '#00e5ff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(e.x, e.y, 18, 0, Math.PI, false);
+                    ctx.stroke();
+                }
             }
         },
         {
-            id: 7, name: "Shield Cruiser", xp: 120, hp: 6, weight: 30,
+            id: 7, name: "Shield Cruiser", xp: 120, hp: 2, weight: 4, // HP = 2, 4% weight
             w: 32, h: 24, speed: 1.1,
             color: '#b0bec5', // Silver Grey
             init: (e) => { e.vx = 0; e.vy = e.speed; e.shieldActive = true; e.shieldTimer = 0; },
@@ -941,7 +950,7 @@
             }
         },
         {
-            id: 8, name: "Heavy Gunship", xp: 120, hp: 8, weight: 25,
+            id: 8, name: "Heavy Gunship", xp: 120, hp: 3, weight: 4, // HP = 3, 4% weight
             w: 36, h: 28, speed: 0.8,
             color: '#455a64', // Dark Steel Blue-Grey
             init: (e) => { e.vx = 0; e.vy = e.speed; },
@@ -958,7 +967,7 @@
             }
         },
         {
-            id: 9, name: "Stealth Assassin", xp: 150, hp: 5, weight: 20,
+            id: 9, name: "Stealth Assassin", xp: 150, hp: 1, weight: 5, // HP = 1, 5% weight
             w: 28, h: 24, speed: 1.8,
             color: '#311b92', // Dark Royal Purple
             init: (e) => { e.vx = 0.8; e.vy = e.speed; e.cloaked = true; },
@@ -984,7 +993,7 @@
             }
         },
         {
-            id: 10, name: "Swarm Caller", xp: 200, hp: 10, weight: 15,
+            id: 10, name: "Swarm Caller", xp: 200, hp: 3, weight: 5, // HP = 3, 5% weight
             w: 40, h: 28, speed: 0.6,
             color: '#ffd700', // Gold Yellow
             init: (e) => { e.vx = 1.2; e.vy = e.speed; },
@@ -1036,7 +1045,7 @@
             w: type.w,
             h: type.h,
             hp: type.hp,
-            maxHP: type.hp,
+            maxHP: type.hp, // Set max HP
             xp: type.xp,
             color: type.color,
             speed: type.speed,
@@ -1106,9 +1115,13 @@
                 const by2 = b.y + 6;
 
                 if (bx1 < ex2 && bx2 > ex1 && by1 < ey2 && by2 > ey1) {
-                    // Shield Cruiser blocks bullets from front when active
-                    if (e.id === 7 && e.shieldActive && b.y > e.y) {
+                    // Fix 1: Shielder (Ship 6) shield absorbs 1 hit separately from front
+                    if (e.id === 6 && e.shieldActive && e.shieldHP > 0 && b.y > e.y) {
                         bullets.splice(bIdx, 1);
+                        e.shieldHP -= 1;
+                        if (e.shieldHP <= 0) {
+                            e.shieldActive = false;
+                        }
                         playShieldHitSound();
                         break;
                     }
@@ -1450,12 +1463,12 @@
                 }
             }
 
-            // Spawner controls (Capped at 6 max concurrent enemies, 1400ms interval)
+            // Fix 2: Spawner controls (Capped at 4 max concurrent enemies, 1800ms spawn interval override)
             if (currentTime >= nextSpawnTime) {
-                if (enemies.length < 6) {
+                if (enemies.length < 4) {
                     spawnEnemy();
                 }
-                nextSpawnTime = currentTime + 1400;
+                nextSpawnTime = currentTime + 1800;
             }
 
             // Run Collision System
@@ -1524,7 +1537,7 @@
             // Render Player Ship
             drawPlayerShip(ctx, player.x, player.y, frameCount);
 
-            // Render Active Particles & Death Flashes
+            // Render Active Particles & Death Flashes (Visual Feedback)
             updateAndDrawParticles(ctx);
             updateAndDrawFlashes(ctx);
 
